@@ -8,9 +8,19 @@ const {
 
 const sendResponse = require("../utils/responseHandler");
 const catchAsync = require("../middlewares/catchAsync");
-const { NODE_ENV } = require("../config/config");
+const { NODE_ENV, COOKIE_DOMAIN } = require("../config/config");
 const { getAccessTokenExpiry } = require("../utils/jwt.utils");
 const { AppError } = require("../middlewares/errorHandler");
+
+// ===============================
+// Shared Cookie Options
+// ===============================
+const getCookieOptions = (req) => ({
+  httpOnly: true,
+  secure: NODE_ENV === "production" && req.secure,
+  sameSite: "lax",
+  ...(NODE_ENV === "production" && COOKIE_DOMAIN && { domain: COOKIE_DOMAIN }),
+});
 
 // ===============================
 // Register
@@ -64,14 +74,8 @@ const login = catchAsync(async (req, res) => {
     ipAddress,
   });
 
-  // Cookie configuration
-  const cookieOptions = {
-    httpOnly: true,
-    secure: NODE_ENV === "production" && req.secure,
-    sameSite: "lax",
-  };
+  const cookieOptions = getCookieOptions(req);
 
-  // Set access token cookie
   res.cookie("accessToken", data.accessToken, {
     ...cookieOptions,
     maxAge: getAccessTokenExpiry() * 1000,
@@ -125,14 +129,8 @@ const refresh = catchAsync(async (req, res) => {
     ipAddress,
   });
 
-  // Cookie configuration
-  const cookieOptions = {
-    httpOnly: true,
-    secure: NODE_ENV === "production" && req.secure,
-    sameSite: "lax",
-  };
+  const cookieOptions = getCookieOptions(req);
 
-  // Set new access token cookie
   res.cookie("accessToken", data.accessToken, {
     ...cookieOptions,
     maxAge: getAccessTokenExpiry() * 1000,
@@ -179,9 +177,11 @@ const logout = catchAsync(async (req, res) => {
 
   await logoutUser({ refreshToken });
 
-  // Clear both cookies
-  res.clearCookie("accessToken");
-  res.clearCookie("refreshToken");
+  const cookieOptions = getCookieOptions(req);
+
+  // Clear both cookies with same domain so browser removes correct cookie
+  res.clearCookie("accessToken", cookieOptions);
+  res.clearCookie("refreshToken", cookieOptions);
 
   return sendResponse(res, 200, true, "Logged out successfully", null);
 });
@@ -212,5 +212,5 @@ module.exports = {
   login,
   refresh,
   logout,
-  verify
+  verify,
 };

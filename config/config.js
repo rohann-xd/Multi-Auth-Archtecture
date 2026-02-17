@@ -25,4 +25,7 @@ module.exports = {
   HRM_CLIENT_SECRET: process.env.HRM_CLIENT_SECRET,
   CRM_CLIENT_ID: process.env.CRM_CLIENT_ID,
   CRM_CLIENT_SECRET: process.env.CRM_CLIENT_SECRET,
+
+  // Cookie Domain
+  COOKIE_DOMAIN: process.env.COOKIE_DOMAIN,
 };
