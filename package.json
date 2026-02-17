@@ -8,7 +8,8 @@
     "dev": "nodemon server.js",
     "migrate": "prisma migrate deploy",
     "prisma:generate": "prisma generate",
-    "setup-keys": "node scripts/setup-keys.js"
+    "setup-keys": "node scripts/setup-keys.js",
+    "seed:clients": "node scripts/seed-clients.js"
   },
   "keywords": [],
   "author": "",

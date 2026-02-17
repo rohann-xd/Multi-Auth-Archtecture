@@ -2,15 +2,14 @@ const {
   registerUser,
   loginUser,
   refreshAuthTokens,
+  logoutUser,
+  verifyToken,
 } = require("../services/auth.service");
 
 const sendResponse = require("../utils/responseHandler");
 const catchAsync = require("../middlewares/catchAsync");
-const { NODE_ENV, COOKIE_SAMESITE } = require("../config/config");
-const {
-  getAccessTokenExpiry,
-  getRefreshTokenExpiry,
-} = require("../utils/jwt.utils");
+const { NODE_ENV } = require("../config/config");
+const { getAccessTokenExpiry } = require("../utils/jwt.utils");
 const { AppError } = require("../middlewares/errorHandler");
 
 // ===============================
@@ -19,10 +18,15 @@ const { AppError } = require("../middlewares/errorHandler");
 const register = catchAsync(async (req, res) => {
   const { name, email, password } = req.body || {};
 
+  const clientId = req.headers["x-client-id"];
+  const clientSecret = req.headers["x-client-secret"];
+
   const user = await registerUser({
     name,
     email,
     password,
+    clientId,
+    clientSecret,
   });
 
   return sendResponse(res, 201, true, "User registered successfully", {
@@ -45,12 +49,17 @@ const login = catchAsync(async (req, res) => {
 
   const { email, password } = req.body;
 
+  const clientId = req.headers["x-client-id"];
+  const clientSecret = req.headers["x-client-secret"];
+
   const device = req.headers["user-agent"] || "unknown";
   const ipAddress = req.ip || req.connection.remoteAddress || "unknown";
 
   const data = await loginUser({
     email,
     password,
+    clientId,
+    clientSecret,
     device,
     ipAddress,
   });
@@ -58,9 +67,8 @@ const login = catchAsync(async (req, res) => {
   // Cookie configuration
   const cookieOptions = {
     httpOnly: true,
-    // ⚠️ FIX: Only use secure if actually using HTTPS
     secure: NODE_ENV === "production" && req.secure,
-    sameSite: NODE_ENV === "production" ? "lax" : "lax",
+    sameSite: "lax",
   };
 
   // Set access token cookie
@@ -84,7 +92,7 @@ const login = catchAsync(async (req, res) => {
     },
   };
 
-  // In development, also include tokens in the response body
+  // In development, also include tokens in response body
   if (NODE_ENV !== "production") {
     responsePayload.tokens = {
       accessToken: data.accessToken,
@@ -101,10 +109,11 @@ const login = catchAsync(async (req, res) => {
 // Refresh Tokens
 // ===============================
 const refresh = catchAsync(async (req, res) => {
-  const { refreshToken, userId } = req.body || {};
+  // Read refresh token from cookie, not request body
+  const refreshToken = req.cookies?.refreshToken;
 
-  if (!refreshToken || !userId) {
-    throw new AppError("Refresh token and userId are required.", 400);
+  if (!refreshToken) {
+    throw new AppError("Refresh token is required.", 400);
   }
 
   const device = req.headers["user-agent"] || "unknown";
@@ -112,7 +121,6 @@ const refresh = catchAsync(async (req, res) => {
 
   const data = await refreshAuthTokens({
     refreshToken,
-    userId,
     device,
     ipAddress,
   });
@@ -120,8 +128,8 @@ const refresh = catchAsync(async (req, res) => {
   // Cookie configuration
   const cookieOptions = {
     httpOnly: true,
-    secure: NODE_ENV === "production",
-    sameSite: COOKIE_SAMESITE,
+    secure: NODE_ENV === "production" && req.secure,
+    sameSite: "lax",
   };
 
   // Set new access token cookie
@@ -137,11 +145,9 @@ const refresh = catchAsync(async (req, res) => {
   });
 
   // Build response payload
-  const responsePayload = {
-    message: "Tokens refreshed successfully",
-  };
+  const responsePayload = {};
 
-  // In development, also include tokens in the response body
+  // In development, also include tokens in response body
   if (NODE_ENV !== "production") {
     responsePayload.tokens = {
       accessToken: data.accessToken,
@@ -160,8 +166,51 @@ const refresh = catchAsync(async (req, res) => {
   );
 });
 
+// ===============================
+// Logout
+// ===============================
+const logout = catchAsync(async (req, res) => {
+  // Read refresh token from cookie
+  const refreshToken = req.cookies?.refreshToken;
+
+  if (!refreshToken) {
+    throw new AppError("Refresh token is required.", 400);
+  }
+
+  await logoutUser({ refreshToken });
+
+  // Clear both cookies
+  res.clearCookie("accessToken");
+  res.clearCookie("refreshToken");
+
+  return sendResponse(res, 200, true, "Logged out successfully", null);
+});
+
+// ===============================
+// Verify Token
+// ===============================
+const verify = catchAsync(async (req, res) => {
+  // Read access token from cookie
+  const accessToken = req.cookies?.accessToken;
+
+  if (!accessToken) {
+    throw new AppError("Access token is required.", 401);
+  }
+
+  const data = await verifyToken({ accessToken });
+
+  return sendResponse(res, 200, true, "Token is valid", {
+    userId: data.userId,
+    clientId: data.clientId,
+    email: data.email,
+    isActive: data.isActive,
+  });
+});
+
 module.exports = {
   register,
   login,
   refresh,
+  logout,
+  verify
 };

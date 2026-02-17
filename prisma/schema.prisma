@@ -7,10 +7,26 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
+  id        String  @id @default(uuid())
   name      String
-  email     String   @unique
+  email     String  @unique
   password  String
+  isActive  Boolean @default(true)
+  isDeleted Boolean @default(false)
+
+  // Relations
+  refreshTokens RefreshToken[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Client {
+  id           String  @id @default(uuid())
+  clientId     String  @unique
+  clientName   String
+  clientSecret String
+  isActive     Boolean @default(true)
 
   // Relations
   refreshTokens RefreshToken[]
@@ -21,23 +37,25 @@ model User {
 
 model RefreshToken {
   id        String   @id @default(uuid())
-
   token     String   @unique
   expiresAt DateTime
   issuedAt  DateTime @default(now())
-
   device    String   @default("unknown")
   ipAddress String?
   isRevoked Boolean  @default(false)
 
-  // Relation
-  userId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Relations
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  clientId String
+  client   Client @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+  @@index([clientId])
   @@index([token])
   @@index([isRevoked])
   @@index([expiresAt])

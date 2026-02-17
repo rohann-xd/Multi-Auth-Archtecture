@@ -19,4 +19,10 @@ module.exports = {
 
   // Cookie Configuration
   COOKIE_SAMESITE: process.env.COOKIE_SAMESITE || "lax",
+
+  // Clients
+  HRM_CLIENT_ID: process.env.HRM_CLIENT_ID,
+  HRM_CLIENT_SECRET: process.env.HRM_CLIENT_SECRET,
+  CRM_CLIENT_ID: process.env.CRM_CLIENT_ID,
+  CRM_CLIENT_SECRET: process.env.CRM_CLIENT_SECRET,
 };

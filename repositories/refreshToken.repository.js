@@ -2,6 +2,7 @@ const prisma = require("../config/prisma");
 
 const createRefreshToken = async ({
   userId,
+  clientId,
   token,
   expiresIn,
   device,
@@ -10,6 +11,7 @@ const createRefreshToken = async ({
   return prisma.refreshToken.create({
     data: {
       userId,
+      clientId,
       token,
       expiresAt: new Date(Date.now() + expiresIn * 1000),
       device,
@@ -18,11 +20,10 @@ const createRefreshToken = async ({
   });
 };
 
-const findValidRefreshToken = async ({ token, userId }) => {
+const findValidRefreshToken = async ({ token }) => {
   return prisma.refreshToken.findFirst({
     where: {
       token,
-      userId,
       isRevoked: false,
       expiresAt: { gt: new Date() },
     },

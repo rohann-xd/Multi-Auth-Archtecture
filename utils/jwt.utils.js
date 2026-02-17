@@ -40,8 +40,14 @@ const getRefreshTokenExpiry = () =>
 // ===============================
 // Generate ACCESS token (JWT + JWE)
 // ===============================
-const generateAccessToken = async (userId) => {
-  const jwt = await new SignJWT({ id: userId, type: "access" })
+const generateAccessToken = async ({ userId, clientId, email, isActive }) => {
+  const jwt = await new SignJWT({
+    id: userId,
+    clientId,
+    email,
+    isActive,
+    type: "access",
+  })
     .setProtectedHeader({ alg: "RS256" })
     .setIssuedAt()
     .setExpirationTime(`${getAccessTokenExpiry()}s`)

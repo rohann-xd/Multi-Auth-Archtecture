@@ -1,20 +1,57 @@
 const userRepository = require("../repositories/user.repository");
 const refreshTokenRepository = require("../repositories/refreshToken.repository");
+const clientRepository = require("../repositories/client.repository");
 const { AppError } = require("../middlewares/errorHandler");
 
 const {
   generateAccessToken,
   generateRefreshTokenString,
   getRefreshTokenExpiry,
+  decryptAndVerifyJWT
 } = require("../utils/jwt.utils");
+
+// ===============================
+// Validate Client Helper
+// ===============================
+const validateClient = async (clientId, clientSecret) => {
+  if (!clientId || !clientSecret) {
+    throw new AppError("Client credentials are required.", 401);
+  }
+
+  const client = await clientRepository.findActiveClient(clientId);
+
+  if (!client) {
+    throw new AppError("Unauthorized client.", 401);
+  }
+
+  const isValidSecret = await clientRepository.compareClientSecret(
+    clientSecret,
+    client.clientSecret,
+  );
+
+  if (!isValidSecret) {
+    throw new AppError("Unauthorized client.", 401);
+  }
+
+  return client;
+};
 
 // ===============================
 // Register
 // ===============================
-const registerUser = async ({ name, email, password }) => {
+const registerUser = async ({
+  name,
+  email,
+  password,
+  clientId,
+  clientSecret,
+}) => {
   if (!name || !email || !password) {
     throw new AppError("Name, email, and password are required.", 400);
   }
+
+  // Validate client first
+  await validateClient(clientId, clientSecret);
 
   const normalizedEmail = email.toLowerCase().trim();
 
@@ -44,6 +81,8 @@ const registerUser = async ({ name, email, password }) => {
 const loginUser = async ({
   email,
   password,
+  clientId,
+  clientSecret,
   device = "unknown",
   ipAddress = null,
 }) => {
@@ -51,12 +90,20 @@ const loginUser = async ({
     throw new AppError("Email and password are required.", 400);
   }
 
+  // Validate client first
+  await validateClient(clientId, clientSecret);
+
   const normalizedEmail = email.toLowerCase().trim();
 
   const user = await userRepository.findUserByEmail(normalizedEmail);
 
   if (!user) {
     throw new AppError("Invalid credentials.", 401);
+  }
+
+  // Check user is active and not deleted
+  if (!user.isActive || user.isDeleted) {
+    throw new AppError("Account is inactive or deleted.", 403);
   }
 
   const isPasswordValid = await userRepository.comparePassword(
@@ -68,16 +115,22 @@ const loginUser = async ({
     throw new AppError("Invalid credentials.", 401);
   }
 
-  // 1. Generate access token
-  const accessToken = await generateAccessToken(user.id);
+  // Generate access token with rich payload
+  const accessToken = await generateAccessToken({
+    userId: user.id,
+    clientId,
+    email: user.email,
+    isActive: user.isActive,
+  });
 
-  // 2. Generate refresh token (random string)
+  // Generate refresh token
   const refreshTokenValue = generateRefreshTokenString();
   const refreshExpiresIn = getRefreshTokenExpiry();
 
-  // 3. Store refresh token in DB
+  // Store refresh token linked to both user and client
   await refreshTokenRepository.createRefreshToken({
     userId: user.id,
+    clientId,
     token: refreshTokenValue,
     expiresIn: refreshExpiresIn,
     device,
@@ -101,35 +154,47 @@ const loginUser = async ({
 // ===============================
 const refreshAuthTokens = async ({
   refreshToken,
-  userId,
   device = "unknown",
   ipAddress = null,
 }) => {
-  if (!refreshToken || !userId) {
-    throw new AppError("Refresh token and userId are required.", 400);
+  if (!refreshToken) {
+    throw new AppError("Refresh token is required.", 400);
   }
 
+  // Find valid token — userId comes from DB, not from request
   const validToken = await refreshTokenRepository.findValidRefreshToken({
     token: refreshToken,
-    userId,
   });
 
   if (!validToken) {
     throw new AppError("Invalid or expired refresh token.", 401);
   }
 
-  // 1. Revoke old refresh token
+  // Full DB check on user
+  const user = await userRepository.findUserById(validToken.userId);
+
+  if (!user || !user.isActive || user.isDeleted) {
+    throw new AppError("Account is inactive or deleted.", 403);
+  }
+
+  // Revoke old refresh token
   await refreshTokenRepository.revokeRefreshToken(refreshToken);
 
-  // 2. Issue new access token
-  const newAccessToken = await generateAccessToken(userId);
+  // Issue new access token with fresh payload
+  const newAccessToken = await generateAccessToken({
+    userId: user.id,
+    clientId: validToken.clientId,
+    email: user.email,
+    isActive: user.isActive,
+  });
 
-  // 3. Issue new refresh token
+  // Issue new refresh token
   const newRefreshTokenValue = generateRefreshTokenString();
   const refreshExpiresIn = getRefreshTokenExpiry();
 
   await refreshTokenRepository.createRefreshToken({
-    userId,
+    userId: user.id,
+    clientId: validToken.clientId,
     token: newRefreshTokenValue,
     expiresIn: refreshExpiresIn,
     device,
@@ -143,8 +208,54 @@ const refreshAuthTokens = async ({
   };
 };
 
+// ===============================
+// Logout
+// ===============================
+const logoutUser = async ({ refreshToken }) => {
+  if (!refreshToken) {
+    throw new AppError("Refresh token is required.", 400);
+  }
+
+  const validToken = await refreshTokenRepository.findValidRefreshToken({
+    token: refreshToken,
+  });
+
+  if (!validToken) {
+    throw new AppError("Invalid or expired refresh token.", 401);
+  }
+
+  await refreshTokenRepository.revokeRefreshToken(refreshToken);
+
+  return { success: true };
+};
+
+// ===============================
+// Verify Token
+// ===============================
+const verifyToken = async ({ accessToken }) => {
+  if (!accessToken) {
+    throw new AppError("Access token is required.", 401);
+  }
+
+  const payload = await decryptAndVerifyJWT(accessToken);
+
+  // Check isActive from payload
+  if (!payload.isActive) {
+    throw new AppError("Account is inactive.", 403);
+  }
+
+  return {
+    userId: payload.id,
+    clientId: payload.clientId,
+    email: payload.email,
+    isActive: payload.isActive,
+  };
+};
+
 module.exports = {
   registerUser,
   loginUser,
   refreshAuthTokens,
+  logoutUser,
+  verifyToken,
 };
