@@ -7,7 +7,7 @@ const {
   generateAccessToken,
   generateRefreshTokenString,
   getRefreshTokenExpiry,
-  decryptAndVerifyJWT
+  decryptAndVerifyJWT,
 } = require("../utils/jwt.utils");
 
 // ===============================
@@ -120,6 +120,7 @@ const loginUser = async ({
     userId: user.id,
     clientId,
     email: user.email,
+    name: user.name,
     isActive: user.isActive,
   });
 
@@ -185,6 +186,7 @@ const refreshAuthTokens = async ({
     userId: user.id,
     clientId: validToken.clientId,
     email: user.email,
+    name: user.name,
     isActive: user.isActive,
   });
 

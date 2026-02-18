@@ -40,11 +40,18 @@ const getRefreshTokenExpiry = () =>
 // ===============================
 // Generate ACCESS token (JWT + JWE)
 // ===============================
-const generateAccessToken = async ({ userId, clientId, email, isActive }) => {
+const generateAccessToken = async ({
+  userId,
+  clientId,
+  email,
+  name,
+  isActive,
+}) => {
   const jwt = await new SignJWT({
     id: userId,
     clientId,
     email,
+    name,
     isActive,
     type: "access",
   })
