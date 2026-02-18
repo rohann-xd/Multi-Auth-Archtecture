@@ -11,10 +11,18 @@
     "setup-keys": "node scripts/setup-keys.js",
     "seed:clients": "node scripts/seed-clients.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rohann-xd/Multi-Auth-Archtecture.git"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/rohann-xd/Multi-Auth-Archtecture/issues"
+  },
+  "homepage": "https://github.com/rohann-xd/Multi-Auth-Archtecture#readme",
   "dependencies": {
     "@prisma/adapter-pg": "^7.4.0",
     "@prisma/client": "^7.4.0",
